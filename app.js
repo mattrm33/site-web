@@ -10,7 +10,7 @@ const USER_KEY = 'studyStreakUser'; // Clé pour localStorage
 // État de l'application (sauvegardé côté client pour UX, synchronisé avec le serveur)
 let appState = {
     isAuthenticated: false,
-    user: null, // Contient: { email, level, feeling, duration, streak, lastLogin }
+    user: null, // Contient: { email, level, feeling, duration, streak, lastLogin, lastLessonDate }
     currentLesson: [], // Les étapes de la leçon du jour
     currentStepIndex: 0,
     isLessonComplete: false,
@@ -108,17 +108,20 @@ function displayMessage(message, isSuccess) {
  */
 async function callApi(endpoint, payload) {
     // En production, ce serait un fetch réel :
-    // const response = await fetch(API_BASE + endpoint, { method: 'POST', ... });
+    // const response = await fetch(API_BASE + endpoint, { 
+    //     method: 'POST', 
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify(payload)
+    // });
     // return response.json();
 
     console.log(`[API Call] Endpoint: ${endpoint}, Payload:`, payload);
 
     // --- LOGIQUE CÔTÉ SERVEUR SIMULÉE (pour le client) ---
-    // En l'absence de serveur réel, on simule l'opération.
-    // En production, l'état serait mis à jour par la réponse du serveur.
+    // En l'absence de serveur réel, on simule l'opération en utilisant localStorage comme DB.
 
     if (endpoint.includes('signup')) {
-        // Simuler le stockage côté serveur
+        // Simuler le stockage côté serveur (vérification d'existence et création)
         if (localStorage.getItem(`user:${payload.email}`)) {
             return { success: false, message: "Cet email est déjà enregistré." };
         }
@@ -129,28 +132,26 @@ async function callApi(endpoint, payload) {
             duration: 20,
             streak: 0,
             lastLogin: null,
-            passwordHash: 'dummy-hash'
+            lastLessonDate: null,
+            passwordHash: 'dummy-hash' // En production: vrai hash
         };
-        // Sauvegarde simulée Vercel KV
         localStorage.setItem(`user:${payload.email}`, JSON.stringify(newUser));
         return { success: true, message: "Inscription réussie. Connectez-vous." };
 
     } else if (endpoint.includes('login')) {
         const userDataStr = localStorage.getItem(`user:${payload.email}`);
-        if (!userDataStr || 'dummy-hash' !== 'dummy-hash') { // Simuler la vérif de mot de passe
+        if (!userDataStr || 'dummy-hash' !== 'dummy-hash') { 
             return { success: false, message: "Email ou mot de passe incorrect." };
         }
-        const userData = JSON.parse(userDataStr);
+        let userData = JSON.parse(userDataStr);
         
-        // Mettre à jour le streak avant de retourner les données
-        const updatedUser = updateStreak(userData);
-        // Simuler la sauvegarde du streak mis à jour dans Vercel KV
+        // Mettre à jour le streak (comme le ferait l'API /api/login)
+        const updatedUser = updateStreak(userData); 
         localStorage.setItem(`user:${payload.email}`, JSON.stringify(updatedUser)); 
 
         return { success: true, user: updatedUser, message: "Connexion réussie." };
 
     } else if (endpoint.includes('save-progress')) {
-        // Simuler la mise à jour des données utilisateur (level, feeling, duration)
         let userData = JSON.parse(localStorage.getItem(`user:${payload.email}`));
         if (userData) {
             userData = { ...userData, ...payload.data };
@@ -165,17 +166,25 @@ async function callApi(endpoint, payload) {
 
 /**
  * Gère le formulaire d'authentification (Inscription/Connexion).
+ * @param {Event} event - L'événement déclencheur.
+ * @param {boolean} isSignup - Vrai si c'est une inscription, Faux pour la connexion.
  */
-async function handleAuthForm(event) {
+async function handleAuthForm(event, isSignup) {
     event.preventDefault();
     const email = document.getElementById('auth-email').value;
     const password = document.getElementById('auth-password').value;
+    
+    // Identifier le bouton correct pour désactivation
+    const btnId = isSignup ? 'signup-btn' : 'login-btn';
+    const btn = document.getElementById(btnId);
 
-    const btn = event.submitter;
-    const isSignup = btn.id === 'signup-btn';
     const endpoint = isSignup ? '/signup' : '/login';
 
-    // Désactiver le bouton pendant le fetch
+    if (!email || !password) {
+        displayMessage("Veuillez remplir tous les champs.", false);
+        return;
+    }
+
     btn.disabled = true;
 
     try {
@@ -187,12 +196,12 @@ async function handleAuthForm(event) {
                 // Connexion réussie
                 appState.user = result.user;
                 appState.isAuthenticated = true;
-                // Stocker l'email pour les sessions futures (simuler le token)
                 localStorage.setItem(USER_KEY, appState.user.email); 
                 initializeApp();
                 switchScreen('home-screen');
             } else {
-                // Inscription réussie, laisser sur l'écran d'auth pour la connexion
+                // Inscription réussie : on peut nettoyer les champs
+                document.getElementById('auth-password').value = '';
             }
         } else {
             displayMessage(result.message, false);
@@ -221,7 +230,7 @@ function logout() {
 // ====================================================================
 
 /**
- * Met à jour le streak de l'utilisateur.
+ * Met à jour le streak de l'utilisateur (Logique côté client simulée de l'API).
  * @param {object} user - L'objet utilisateur actuel.
  * @returns {object} - L'objet utilisateur mis à jour.
  */
@@ -230,7 +239,6 @@ function updateStreak(user) {
     today.setHours(0, 0, 0, 0);
     
     if (!user.lastLogin) {
-        // Première connexion
         user.streak = 1; 
         user.lastLogin = today.toISOString();
         return user;
@@ -243,7 +251,7 @@ function updateStreak(user) {
     yesterday.setDate(today.getDate() - 1);
 
     if (today.getTime() === lastLogin.getTime()) {
-        // Déjà connecté aujourd'hui, ne rien faire
+        // Déjà connecté aujourd'hui
         return user;
     } else if (yesterday.getTime() === lastLogin.getTime()) {
         // Connexion consécutive : Incrémenter
@@ -294,45 +302,34 @@ function createDailyLesson() {
     const { level, feeling, duration } = appState.user;
     const lessonSteps = [];
 
-    // Étape 1 : Explication/Leçon (Longueur dépend de la durée)
+    // Étape 1 : Explication/Leçon
     let explanationText = `Leçon sur le thème : **Le Droit des Obligations** - Année ${level}.`;
-    let numExercises = 1;
+    let numExercises = Math.floor(duration / 10); // 10min = 1 exo, 20min = 2 exos, 30min = 3 exos
 
-    if (duration == 20) {
-        explanationText += " Explication modérée pour 20 minutes de session.";
-        numExercises = 2;
-    } else if (duration == 30) {
-        explanationText += " Explication détaillée pour 30 minutes de session.";
-        numExercises = 3;
-    } else {
-        explanationText += " Explication courte pour 10 minutes de session.";
-        numExercises = 1;
-    }
+    if (duration == 10) explanationText += " Explication courte.";
+    if (duration == 20) explanationText += " Explication modérée.";
+    if (duration == 30) explanationText += " Explication détaillée.";
 
     lessonSteps.push({ type: 'explanation', content: explanationText, title: 'Introduction' });
 
     // Étapes 2 à N : Exercices (Adaptés au niveau et au ressenti)
     const availableExo = EXERCISES_DATA[level];
-
-    // Plus de questions ouvertes pour niveaux élevés (++)
     const feelingMap = { '--': 0, '-': 0.5, '_': 1, '+': 1.5, '++': 2 };
-    const caseStudyChance = feelingMap[feeling]; // 0 à 2
+    const caseStudyChance = feelingMap[feeling]; 
 
     const types = ['qcm', 'flashcard', 'caseStudy'];
     
-    // Remplir les étapes avec des exercices aléatoires
     for (let i = 0; i < numExercises; i++) {
         let typeIndex = Math.floor(Math.random() * types.length);
         let type = types[typeIndex];
 
         // S'assurer que le niveau ressenti influence les types d'exercices
         if (type === 'caseStudy' && Math.random() < (1 - (caseStudyChance / 2))) {
-            // Si la chance est faible (ressenti bas), on bascule vers QCM/Flashcard
-            type = (Math.random() > 0.5) ? 'qcm' : 'flashcard';
+            type = (Math.random() > 0.5) ? 'qcm' : 'flashcard'; // Moins de cas pratiques si niveau faible
         }
 
         const list = availableExo[type];
-        const exo = list[Math.floor(Math.random() * list.length)]; // Choix aléatoire
+        const exo = list[Math.floor(Math.random() * list.length)];
         lessonSteps.push({ type: type, content: exo, title: `Exercice ${i + 1}` });
     }
 
@@ -349,13 +346,17 @@ function renderCurrentStep() {
     const step = appState.currentLesson[appState.currentStepIndex];
     const contentArea = document.getElementById('lesson-content');
     const nextBtn = document.getElementById('next-step-btn');
-    contentArea.innerHTML = `<h3>${step.title}</h3>`;
-    nextBtn.disabled = true; // Désactiver par défaut
-
-    document.getElementById('lesson-progress-bar').setAttribute('aria-valuenow', appState.currentStepIndex);
+    
+    // Mise à jour de la barre de progression
+    const progressValue = appState.currentStepIndex;
+    const progressMax = appState.currentLesson.length;
+    document.getElementById('lesson-progress-bar').setAttribute('aria-valuenow', progressValue);
     document.querySelector('.progress-fill').style.width = 
-        ((appState.currentStepIndex / appState.currentLesson.length) * 100) + '%';
-        
+        ((progressValue / progressMax) * 100) + '%';
+
+    contentArea.innerHTML = '';
+    nextBtn.disabled = true;
+
     if (!step) {
         // Fin de la leçon
         contentArea.innerHTML = '<h3>Félicitations ! Session Quotidienne Terminée ! 🥳</h3><p>Vous avez révisé pour aujourd\'hui. Revenez demain pour garder votre streak !</p>';
@@ -371,6 +372,8 @@ function renderCurrentStep() {
         return;
     }
     
+    contentArea.innerHTML = `<h3>${step.title}</h3>`;
+
     // Rendu spécifique à chaque type
     if (step.type === 'explanation') {
         contentArea.innerHTML += `<p>${step.content}</p>`;
@@ -384,7 +387,7 @@ function renderCurrentStep() {
         renderCaseStudy(contentArea, step.content, nextBtn);
     }
     
-    window.scrollTo(0, 0); // Revenir en haut de l'écran de leçon
+    window.scrollTo(0, 0);
 }
 
 /**
@@ -399,12 +402,14 @@ function renderQCM(contentArea, exo, nextBtn) {
     
     contentArea.innerHTML += optionsHTML;
     
+    const optionsContainer = contentArea.querySelector('.card');
+    let isAnswered = false;
+
     contentArea.querySelectorAll('.qcm-option').forEach(option => {
         option.addEventListener('click', () => {
-            // Empêcher de re-cliquer une fois corrigé
-            if (contentArea.classList.contains('answered')) return;
+            if (isAnswered) return;
+            isAnswered = true;
             
-            contentArea.classList.add('answered'); // Marquer comme répondu
             const selectedAnswer = option.getAttribute('data-option');
             const isCorrect = selectedAnswer === exo.a;
 
@@ -413,7 +418,6 @@ function renderQCM(contentArea, exo, nextBtn) {
                 displayMessage("✅ Bonne réponse !", true);
             } else {
                 option.classList.add('incorrect');
-                // Mettre en évidence la bonne réponse
                 contentArea.querySelector(`[data-option="${exo.a}"]`).classList.add('correct');
                 displayMessage(`❌ Mauvaise réponse. La bonne réponse était : ${exo.a}`, false);
             }
@@ -468,7 +472,7 @@ function renderCaseStudy(contentArea, exo, nextBtn) {
             return;
         }
         
-        displayMessage("Analyse soumise ! L'autocorrection n'est pas possible ici. L'effort compte.", true);
+        displayMessage("Analyse soumise ! L'effort est récompensé.", true);
         submitBtn.disabled = true;
         textarea.disabled = true;
         nextBtn.disabled = false;
@@ -501,8 +505,8 @@ function goToNextStep() {
  * Affiche un message motivateur aléatoire ou indexé.
  */
 function displayDailyMotto() {
-    // Utiliser l'index du jour dans l'année (simple mais change tous les jours)
-    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+    const today = new Date();
+    const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
     const mottoIndex = dayOfYear % MOTTO_LIST.length;
     document.getElementById('motto-text').textContent = MOTTO_LIST[mottoIndex];
 }
@@ -535,10 +539,8 @@ function initializeHomeUI() {
         option.setAttribute('aria-checked', f === user.feeling ? 'true' : 'false');
         
         option.addEventListener('click', () => {
-            // Mettre à jour la sélection
             document.querySelectorAll('.feeling-option').forEach(o => o.setAttribute('aria-checked', 'false'));
             option.setAttribute('aria-checked', 'true');
-            // Mettre à jour l'état (avant la sauvegarde)
             appState.user.feeling = f;
         });
         feelingScale.appendChild(option);
@@ -569,18 +571,35 @@ function initializeHomeUI() {
  * Ajoute tous les écouteurs d'événements principaux.
  */
 function addEventListeners() {
-    // Authentification
-    document.getElementById('auth-form').addEventListener('submit', handleAuthForm);
-    document.getElementById('signup-btn').addEventListener('click', handleAuthForm);
+    
+    // ----------------------------------------------------------------------
+    // 🔥 CORRECTION DE L'AUTHENTIFICATION 🔥
+    // ----------------------------------------------------------------------
+    
+    // 1. Gérer l'événement SUBMIT du formulaire (déclenché par la touche Entrée ou login-btn)
+    // C'est le chemin par défaut pour la CONNEXION (isSignup = false)
+    document.getElementById('auth-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        handleAuthForm(event, false); // Mode CONNEXION
+    });
+
+    // 2. Gérer l'événement CLICK sur le bouton INSCRIPTION (type="button")
+    document.getElementById('signup-btn').addEventListener('click', (event) => {
+        event.preventDefault();
+        handleAuthForm(event, true); // Mode INSCRIPTION
+    });
+    
+    // ----------------------------------------------------------------------
+    
+    // Déconnexion
     document.getElementById('logout-btn').addEventListener('click', logout);
 
     // Sauvegarde des paramètres
     document.getElementById('save-settings-btn').addEventListener('click', async () => {
         const newLevel = document.getElementById('select-level').value;
         const newDuration = parseInt(document.getElementById('select-duration').value, 10);
-        const newFeeling = appState.user.feeling; // Déjà mis à jour par le listener de feeling
+        const newFeeling = appState.user.feeling;
 
-        // Mettre à jour l'état local avant la synchro
         appState.user.level = newLevel;
         appState.user.duration = newDuration;
         
@@ -613,7 +632,6 @@ function addEventListeners() {
     // Leçon : Retour à l'accueil
     document.getElementById('back-home-btn').addEventListener('click', () => {
         switchScreen('home-screen');
-        // Assurez-vous que l'état est mis à jour (streak/lastLogin)
         initializeApp();
     });
 }
@@ -626,6 +644,7 @@ async function initializeApp() {
     
     if (storedEmail) {
         // Simuler la re-connexion automatique avec l'email stocké
+        // Note: L'appel /login met à jour le streak côté serveur simulé
         const result = await callApi('/login', { email: storedEmail, password: 'dummy-password' });
         
         if (result.success) {
@@ -633,13 +652,11 @@ async function initializeApp() {
             appState.isAuthenticated = true;
             initializeHomeUI();
         } else {
-            // Le token/email n'est plus valide sur le serveur
             localStorage.removeItem(USER_KEY);
             switchScreen('auth-screen');
             displayMessage("Session expirée. Veuillez vous reconnecter.", false);
         }
     } else {
-        // Pas d'email stocké, afficher l'écran d'authentification
         switchScreen('auth-screen');
     }
 }
