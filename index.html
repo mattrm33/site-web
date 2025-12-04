@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyStreak - Révisions Droit</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app-container" class="mobile-app">
+        
+        <header>
+            <svg viewBox="0 0 100 100" class="logo" aria-label="StudyStreak Logo">
+                <circle cx="50" cy="50" r="45" fill="#58CC02"/>
+                <text x="50%" y="60%" text-anchor="middle" font-size="50" fill="white" font-weight="bold">§</text>
+            </svg>
+            <h1>StudyStreak</h1>
+        </header>
+
+        <div id="message-area" role="alert" aria-live="polite"></div>
+
+        <section id="auth-screen" class="screen active" aria-labelledby="auth-title">
+            <h2 id="auth-title">Connexion & Inscription</h2>
+            <form id="auth-form">
+                <input type="email" id="auth-email" placeholder="Email" required aria-label="Votre adresse email">
+                <input type="password" id="auth-password" placeholder="Mot de passe" required aria-label="Votre mot de passe">
+                
+                <button type="submit" id="login-btn" class="big-button primary-button">Se Connecter</button>
+                <button type="button" id="signup-btn" class="big-button secondary-button">S'Inscrire</button>
+            </form>
+        </section>
+
+        <section id="home-screen" class="screen" aria-labelledby="home-title">
+            <h2 id="home-title">Bienvenue !</h2>
+            
+            <div id="daily-motto" class="card motto-card" role="note">
+                <p>💬 Aujourd'hui : <span id="motto-text"></span></p>
+            </div>
+
+            <div class="card streak-card" role="status">
+                <h3>🔥 Streak Actuel : <span id="current-streak">0</span> jours</h3>
+                <div id="streak-badge" class="badge-icon" aria-label="Récompense de Streak"></div>
+            </div>
+
+            <div class="card choice-card">
+                <h3>🎓 Choix de l'Année</h3>
+                <select id="select-level" aria-label="Sélectionner votre année d'étude">
+                    <option value="1ère année">1ère Année</option>
+                    <option value="2ème année">2ème Année</option>
+                    <option value="3ème année">3ème Année</option>
+                </select>
+            </div>
+
+            <div class="card choice-card">
+                <h3>⚖️ Votre Niveau Ressenti</h3>
+                <div id="feeling-scale" class="scale-buttons" role="radiogroup" aria-label="Échelle de niveau ressenti">
+                    </div>
+            </div>
+            
+            <div class="card choice-card">
+                <h3>⏱️ Durée Quotidienne</h3>
+                <select id="select-duration" aria-label="Sélectionner la durée de révision quotidienne">
+                    <option value="10">10 minutes (Explication courte + 1 Exo)</option>
+                    <option value="20">20 minutes (Explication moyenne + 2 Exos)</option>
+                    <option value="30">30 minutes (Explication longue + 3 Exos)</option>
+                </select>
+                <button id="save-settings-btn" class="big-button secondary-button">Sauvegarder les Paramètres</button>
+            </div>
+            
+            <button id="start-lesson-btn" class="big-button primary-button">Démarrer la Leçon Quotidienne</button>
+            <button id="logout-btn" class="text-button">Déconnexion</button>
+
+        </section>
+
+        <section id="lesson-screen" class="screen" aria-labelledby="lesson-title">
+            <h2 id="lesson-title">Leçon du Jour</h2>
+            
+            <div id="lesson-progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill"></div>
+            </div>
+
+            <div id="lesson-content" class="card">
+                </div>
+            
+            <button id="next-step-btn" class="big-button primary-button" aria-disabled="true" disabled>Suivant</button>
+            <button id="back-home-btn" class="text-button">Retour à l'Accueil</button>
+
+        </section>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
